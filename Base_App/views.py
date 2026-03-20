@@ -9,36 +9,39 @@ from django.contrib.auth.views import LoginView as AuthLoginView
 from Base_App.models import BookTable, AboutUs, Feedback, ItemList, Items, Cart
 from django.contrib.auth import logout
 from django.urls import reverse_lazy
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
+
+@login_required
+@require_POST
+def remove_from_cart(request):
+    item_id = request.POST.get('item_id')
+
+    cart_item = Cart.objects.filter(user=request.user, item_id=item_id).first()
+
+    if cart_item:
+        cart_item.delete()
+        return JsonResponse({'message': 'Item removed'})
+    
+    return JsonResponse({'error': 'Item not found'}, status=404)
 
 def add_to_cart(request):
     if request.method == 'POST' and request.user.is_authenticated:
         item_id = request.POST.get('item_id')
         item = get_object_or_404(Items, id=item_id)
-        
-        print(f'Item ID: {item_id}')  # Debug print
-        print(f'Item: {item.Item_name}, Price: {item.Price}')  # Debug print
 
-        # Retrieve or initialize the cart from the session
-        cart = request.session.get('cart', {})
-        print(f'Cart before update: {cart}')  # Debug print
+        cart_item, created = Cart.objects.get_or_create(
+            user=request.user,
+            item=item
+        )
 
-        # Update the cart
-        if item_id in cart:
-            cart[item_id]['quantity'] += 1
-        else:
-            cart[item_id] = {
-                'name': item.Item_name,
-                'price': item.Price,
-                'quantity': 1
-            }
+        if not created:
+            cart_item.quantity += 1
+            cart_item.save()
 
-        request.session['cart'] = cart
-        print(f'Cart after update: {cart}')  # Debug print
-
-        return JsonResponse({'message': 'Item added to cart', 'cart': cart})
-    else:
-        print('Invalid request')  # Debug print
-        return JsonResponse({'error': 'Invalid request'}, status=400)
+        return JsonResponse({'message': 'Item added to cart'})
+    
+    return JsonResponse({'error': 'Invalid request'}, status=400)
 
 
 def get_cart_items(request):
@@ -46,6 +49,7 @@ def get_cart_items(request):
         cart_items = Cart.objects.filter(user=request.user).select_related('item')
         items = [
             {
+                'id': cart_item.item.id,
                 'name': cart_item.item.Item_name,
                 'quantity': cart_item.quantity,
                 'price': cart_item.item.Price,
@@ -92,7 +96,7 @@ def HomeView(request):
 
 
 def AboutView(request):
-    data = AboutUs.objects.all()
+    data = AboutUs.objects.first()
     return render(request, 'about.html',{'data': data})
 
 
@@ -114,7 +118,7 @@ def BookTableView(request):
         booking_data = request.POST.get('booking_data')
 
         # Validate the form data
-        if name != '' and len(phone_number) == 10 and email != '' and total_person != '0' and booking_data != '':
+        if name and phone_number.isdigit() and len(phone_number) == 10 and email and total_person and booking_data:
             # Save the booking data to the database
             data = BookTable(Name=name, Phone_number=phone_number,
                              Email=email, Total_person=total_person,
@@ -138,7 +142,9 @@ def BookTableView(request):
 
             # Redirect or render a feedback page with success message
             return render(request, 'feedback.html', {'success': 'Booking request submitted successfully! Please check your confirmation email.'})
-
+        
+        else: messages.error(request, "Invalid input. Please check your details.")
+        
     # Render the book_table.html template and pass the API key to it
     return render(request, 'book_table.html', {'google_maps_api_key': google_maps_api_key})
 

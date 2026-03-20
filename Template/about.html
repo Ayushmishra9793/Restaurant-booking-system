@@ -29,9 +29,11 @@
               
               <div>
                 <p>
-                {% for i in data %}
-                {{ i.Description|safe }}
-                {% endfor %}
+                {% if data %}
+                  {{ data.Description|safe }}
+                {% else %}
+                  <p>No content available</p>
+                {% endif %}
               </p>
              </div>
              
